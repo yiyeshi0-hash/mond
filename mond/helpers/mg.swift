@@ -10,6 +10,15 @@ import Darwin
 import MachO
 import UIKit
 
+func mobilegestalt_unlock() -> Bool {
+    return TweakPaths.gestalt.withCString { chflags($0, 0) == 0 }
+}
+
+func mobilegestalt_lock() -> Bool {
+    let UF_IMMUTABLE: Int32 = 0x00000002
+    return TweakPaths.gestalt.withCString { chflags($0, UF_IMMUTABLE) == 0 }
+}
+
 func cache_data_offset(_ key: String) -> Int {
     let lib_mg = "/usr/lib/libMobileGestalt.dylib"
     dlopen(lib_mg, RTLD_GLOBAL)

@@ -5,6 +5,7 @@
 //  Created by ruter on 16.07.26.
 //
 
+import Darwin
 import SwiftUI
 import PartyUI
 
@@ -285,6 +286,7 @@ struct ContentView: View {
         case missingArtworkSubtype
         case missingArtworkDeviceName
         case writeVerificationFailed
+        case lockFailed
         
         var errorDescription: String? {
             switch self {
@@ -294,6 +296,8 @@ struct ContentView: View {
                 return "Failed to get ArtworkDeviceProductDescription!"
             case .writeVerificationFailed:
                 return "Failed to verify MobileGestalt values after writing!"
+            case .lockFailed:
+                return "Failed to lock MobileGestalt file after writing!"
             }
         }
     }
@@ -445,10 +449,16 @@ struct ContentView: View {
                 }
             }
 
+            guard mobilegestalt_lock() else {
+                print("(mg) failed to lock mobilegestalt: \(errno)")
+                throw MGViewError.lockFailed
+            }
+            print("(mg) locked mobilegestalt")
+
             mg_dict_now = NSMutableDictionary()
             enable_devicename = false
 
-            print("(mg) successfully overwrote and verified mobilegestalt!")
+            print("(mg) successfully overwrote, verified, and locked mobilegestalt!")
             Alertinator.shared.alert(title: "Successfully applied Gestalt tweaks!", body: "Respring your device for changes to take effect. Note that some tweaks may require a reboot for them to apply properly.", actionLabel: "Respring", action: {
                 state.respring()
             })
@@ -477,6 +487,10 @@ struct ContentView: View {
         let target_url = URL(fileURLWithPath: TweakPaths.gestalt)
         let temp_url = target_url.deletingLastPathComponent()
             .appendingPathComponent(".\(target_url.lastPathComponent).\(UUID().uuidString).tmp")
+
+        if !mobilegestalt_unlock() {
+            print("(mg) failed to clear mobilegestalt flags: \(errno)")
+        }
 
         try data.write(to: temp_url, options: [.withoutOverwriting])
         defer { try? fm.removeItem(at: temp_url) }
