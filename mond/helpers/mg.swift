@@ -15,7 +15,7 @@ func mobilegestalt_unlock() -> Bool {
 }
 
 func mobilegestalt_lock() -> Bool {
-    let UF_IMMUTABLE: Int32 = 0x00000002
+    let UF_IMMUTABLE: UInt32 = 0x00000002
     return TweakPaths.gestalt.withCString { chflags($0, UF_IMMUTABLE) == 0 }
 }
 
