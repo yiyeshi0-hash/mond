@@ -22,6 +22,8 @@ struct ContentView: View {
     @State private var og_region_code: String = ""
     @State private var og_region_suffix: String = ""
     @State private var region_suffix: String = ""
+    @State private var og_model_number: String = ""
+    @State private var model_number: String = ""
     @State private var enable_devicename: Bool = false
     @State private var product_type: String = ""
     
@@ -110,7 +112,17 @@ struct ContentView: View {
                         TextField("Device Name", text: $mg_devicename)
                     }
 
-                    Picker("Model Region", selection: $region_suffix) {
+                    Picker("Model Region", selection: Binding(
+                        get: { region_suffix },
+                        set: { newValue in
+                            region_suffix = newValue
+                            if newValue == og_region_suffix {
+                                model_number = og_model_number
+                            } else if let mapped = model_number(for: newValue) {
+                                model_number = mapped
+                            }
+                        }
+                    )) {
                         if !region_suffixes.contains(og_region_suffix) {
                             Text("Original (\(og_region_suffix))").tag(og_region_suffix)
                         }
@@ -129,6 +141,14 @@ struct ContentView: View {
                         Text("X/A (Australia)").tag("X/A")
                         Text("C/A (Canada)").tag("C/A")
                         Text("Y/A (Spain)").tag("Y/A")
+                    }
+
+                    HStack {
+                        Text("Model Number")
+                        TextField("A2848", text: $model_number)
+                            .keyboardType(.asciiCapable)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.characters)
                     }
                 } header: {
                     Label("Device Artwork", systemImage: "paintbrush.pointed")
@@ -299,6 +319,7 @@ struct ContentView: View {
             
             og_region_code = og_cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String ?? ""
             og_region_suffix = og_cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? ""
+            og_model_number = og_cache_extra["97JDvERpVwO+GHtthIh7hA"] as? String ?? ""
 
             // now get current gestalt values
             let cache_extra = mg_dict_now["CacheExtra"] as? NSMutableDictionary ?? NSMutableDictionary()
@@ -314,6 +335,7 @@ struct ContentView: View {
             }
             
             region_suffix = cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? og_region_suffix
+            model_number = cache_extra["97JDvERpVwO+GHtthIh7hA"] as? String ?? og_model_number
 
             if let productType = cache_extra["h9jDsbgj7xIVeIQ8S3/X3Q"] as? String, !productType.isEmpty {
                 product_type = productType
@@ -350,6 +372,15 @@ struct ContentView: View {
                 cache_extra.removeObject(forKey: "h63QSdBCiT/z0WU6rdQv6Q")
             }
 
+            if !model_number.isEmpty {
+                cache_extra["97JDvERpVwO+GHtthIh7hA"] = model_number
+            } else if !og_model_number.isEmpty {
+                cache_extra["97JDvERpVwO+GHtthIh7hA"] = og_model_number
+            } else {
+                cache_extra.removeObject(forKey: "97JDvERpVwO+GHtthIh7hA")
+            }
+
+            print("(mg) writing region=\(region_suffix) region_code=\(region_code(for: region_suffix)) model_number=\(model_number)")
             let data = try PropertyListSerialization.data(fromPropertyList: mg_dict_now, format: .xml, options: 0)
 
             try mg_write(data)
@@ -519,6 +550,57 @@ struct ContentView: View {
     private func region_code(for suffix: String) -> String {
         guard let code = suffix.split(separator: "/").first else { return "" }
         return String(code)
+    }
+
+    private func model_number(for suffix: String) -> String? {
+        switch suffix {
+        case "ZP/A":
+            return model_number(for: "CH/A")
+        case "CH/A", "LL/A":
+            let us = suffix == "LL/A"
+            switch machine_name() {
+            case "iPhone14,7":
+                return us ? "A2649" : "A2884"
+            case "iPhone14,8":
+                return us ? "A2632" : "A2888"
+            case "iPhone15,2":
+                return us ? "A2650" : "A2892"
+            case "iPhone15,3":
+                return us ? "A2651" : "A2896"
+            case "iPhone15,4":
+                return us ? "A2846" : "A3092"
+            case "iPhone15,5":
+                return us ? "A2847" : "A3096"
+            case "iPhone16,1":
+                return us ? "A2848" : "A3104"
+            case "iPhone16,2":
+                return us ? "A2849" : "A3108"
+            case "iPhone17,3":
+                return us ? "A3081" : "A3288"
+            case "iPhone17,4":
+                return us ? "A3082" : "A3291"
+            case "iPhone17,1":
+                return us ? "A3083" : "A3294"
+            case "iPhone17,2":
+                return us ? "A3084" : "A3297"
+            case "iPhone18,3":
+                return us ? "A3258" : "A3521"
+            case "iPhone18,1":
+                return us ? "A3256" : "A3524"
+            case "iPhone18,2":
+                return us ? "A3257" : "A3527"
+            case "iPhone18,4":
+                return us ? "A3260" : "A3518"
+            case "iPhone17,5":
+                return us ? "A3212" : "A3410"
+            case "iPhone18,5":
+                return us ? "A3575" : "A3635"
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
     }
     
     private func machine_name() -> String {
