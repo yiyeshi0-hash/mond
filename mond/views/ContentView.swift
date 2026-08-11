@@ -321,7 +321,12 @@ struct ContentView: View {
             guard let ogDeviceName = og_artwork["ArtworkDeviceProductDescription"] as? String else { throw MGViewError.missingArtworkDeviceName }
             
             og_region_code = og_cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String ?? ""
-            og_region_suffix = og_cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? ""
+            for key in region_suffix_keys {
+                if let value = og_cache_extra[key] as? String, !value.isEmpty {
+                    og_region_suffix = value
+                    break
+                }
+            }
             og_model_number = og_cache_extra["97JDvERpVwO+GHtthIh7hA"] as? String ?? ""
 
             // now get current gestalt values
@@ -337,7 +342,15 @@ struct ContentView: View {
                 enable_devicename = true
             }
             
-            region_suffix = cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? og_region_suffix
+            for key in region_suffix_keys {
+                if let value = cache_extra[key] as? String, !value.isEmpty {
+                    region_suffix = value
+                    break
+                }
+            }
+            if region_suffix.isEmpty {
+                region_suffix = og_region_suffix
+            }
             model_number = cache_extra["97JDvERpVwO+GHtthIh7hA"] as? String ?? og_model_number
 
             if let productType = cache_extra["h9jDsbgj7xIVeIQ8S3/X3Q"] as? String, !productType.isEmpty {
@@ -364,14 +377,20 @@ struct ContentView: View {
                 artwork_dict["ArtworkDeviceProductDescription"] = mg_devicename
             }
             
-            if !region_suffix.isEmpty {
-                cache_extra["zHeENZu+wbg7PUprwNwBWg"] = region_suffix
-                cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = region_code(for: region_suffix)
-            } else if !og_region_suffix.isEmpty {
-                cache_extra["zHeENZu+wbg7PUprwNwBWg"] = og_region_suffix
-                cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = og_region_code
+            let suffix = region_suffix.isEmpty ? og_region_suffix : region_suffix
+            let code = region_suffix.isEmpty ? og_region_code : region_code(for: region_suffix)
+            let existing_suffix_keys = region_suffix_keys.filter { cache_extra[$0] != nil }
+            let suffix_keys = existing_suffix_keys.isEmpty ? [region_suffix_keys.last!] : existing_suffix_keys
+
+            if !suffix.isEmpty {
+                for key in suffix_keys {
+                    cache_extra[key] = suffix
+                }
+                cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = code
             } else {
-                cache_extra.removeObject(forKey: "zHeENZu+wbg7PUprwNwBWg")
+                for key in region_suffix_keys {
+                    cache_extra.removeObject(forKey: key)
+                }
                 cache_extra.removeObject(forKey: "h63QSdBCiT/z0WU6rdQv6Q")
             }
 
@@ -397,13 +416,21 @@ struct ContentView: View {
             let expected_model = model_number.isEmpty ? og_model_number : model_number
 
             if expected_suffix.isEmpty && expected_code.isEmpty {
-                guard written_extra["zHeENZu+wbg7PUprwNwBWg"] == nil,
-                      written_extra["h63QSdBCiT/z0WU6rdQv6Q"] == nil else {
+                for key in region_suffix_keys {
+                    guard written_extra[key] == nil else {
+                        throw MGViewError.writeVerificationFailed
+                    }
+                }
+                guard written_extra["h63QSdBCiT/z0WU6rdQv6Q"] == nil else {
                     throw MGViewError.writeVerificationFailed
                 }
             } else {
-                guard written_extra["zHeENZu+wbg7PUprwNwBWg"] as? String == expected_suffix,
-                      written_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == expected_code else {
+                for key in suffix_keys {
+                    guard written_extra[key] as? String == expected_suffix else {
+                        throw MGViewError.writeVerificationFailed
+                    }
+                }
+                guard written_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == expected_code else {
                     throw MGViewError.writeVerificationFailed
                 }
             }
@@ -530,17 +557,24 @@ struct ContentView: View {
         
         return Binding<Bool>(
             get: {
+                let suffix = region_suffix_keys.compactMap { cache_extra[$0] as? String }.first ?? ""
                 return cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == "LL" &&
-                    cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String == "LL/A"
+                    suffix == "LL/A"
             },
             set: { enabled in
                 if enabled {
                     Alertinator.shared.alert(title: "Warning!", body: "Please do not use this feature to bypass region restrictions that would equate to breaking regional laws (e.g. disabling the camera shutter sound). We will NOT be held responsible for enabling any illegal activites!")
                     cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = "LL"
-                    cache_extra["zHeENZu+wbg7PUprwNwBWg"] = "LL/A"
+                    let existing_suffix_keys = region_suffix_keys.filter { cache_extra[$0] != nil }
+                    let suffix_keys = existing_suffix_keys.isEmpty ? [region_suffix_keys.last!] : existing_suffix_keys
+                    for key in suffix_keys {
+                        cache_extra[key] = "LL/A"
+                    }
                 } else {
+                    for key in region_suffix_keys {
+                        cache_extra.removeObject(forKey: key)
+                    }
                     cache_extra.removeObject(forKey: "h63QSdBCiT/z0WU6rdQv6Q")
-                    cache_extra.removeObject(forKey: "zHeENZu+wbg7PUprwNwBWg")
                 }
             }
         )
@@ -579,6 +613,10 @@ struct ContentView: View {
 
     private var region_suffixes: [String] {
         ["CH/A", "LL/A", "ZP/A", "KH/A", "DN/A", "TA/A", "B/A", "F/A", "J/A", "X/A", "C/A", "Y/A"]
+    }
+
+    private var region_suffix_keys: [String] {
+        ["zHeENZu+wbg7PUprwNwBWg", "yK+xavymRGZ3xWc1tb8XDg"]
     }
 
     private func region_code(for suffix: String) -> String {
