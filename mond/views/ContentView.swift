@@ -19,6 +19,9 @@ struct ContentView: View {
     @State private var subtype: Int = 0
     @State private var og_subtype: Int = 0
     @State private var og_devicename: String = ""
+    @State private var og_region_code: String = ""
+    @State private var og_region_suffix: String = ""
+    @State private var region_suffix: String = ""
     @State private var enable_devicename: Bool = false
     @State private var product_type: String = ""
     
@@ -105,6 +108,27 @@ struct ContentView: View {
                     
                     if enable_devicename {
                         TextField("Device Name", text: $mg_devicename)
+                    }
+
+                    Picker("Model Region", selection: $region_suffix) {
+                        if !region_suffixes.contains(og_region_suffix) {
+                            Text("Original (\(og_region_suffix))").tag(og_region_suffix)
+                        }
+                        if !region_suffixes.contains(region_suffix) && region_suffix != og_region_suffix {
+                            Text("Current (\(region_suffix))").tag(region_suffix)
+                        }
+                        Text("CH/A (China)").tag("CH/A")
+                        Text("LL/A (US)").tag("LL/A")
+                        Text("ZP/A (Hong Kong)").tag("ZP/A")
+                        Text("KH/A (Korea)").tag("KH/A")
+                        Text("DN/A (Germany)").tag("DN/A")
+                        Text("TA/A (Taiwan)").tag("TA/A")
+                        Text("B/A (UK)").tag("B/A")
+                        Text("F/A (France)").tag("F/A")
+                        Text("J/A (Japan)").tag("J/A")
+                        Text("X/A (Australia)").tag("X/A")
+                        Text("C/A (Canada)").tag("C/A")
+                        Text("Y/A (Spain)").tag("Y/A")
                     }
                 } header: {
                     Label("Device Artwork", systemImage: "paintbrush.pointed")
@@ -273,6 +297,9 @@ struct ContentView: View {
             
             guard let ogDeviceName = og_artwork["ArtworkDeviceProductDescription"] as? String else { throw MGViewError.missingArtworkDeviceName }
             
+            og_region_code = og_cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String ?? ""
+            og_region_suffix = og_cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? ""
+
             // now get current gestalt values
             let cache_extra = mg_dict_now["CacheExtra"] as? NSMutableDictionary ?? NSMutableDictionary()
             
@@ -286,6 +313,8 @@ struct ContentView: View {
                 enable_devicename = true
             }
             
+            region_suffix = cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String ?? og_region_suffix
+
             if let productType = cache_extra["h9jDsbgj7xIVeIQ8S3/X3Q"] as? String, !productType.isEmpty {
                 product_type = productType
             } else {
@@ -310,6 +339,17 @@ struct ContentView: View {
                 artwork_dict["ArtworkDeviceProductDescription"] = mg_devicename
             }
             
+            if !region_suffix.isEmpty {
+                cache_extra["zHeENZu+wbg7PUprwNwBWg"] = region_suffix
+                cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = region_code(for: region_suffix)
+            } else if !og_region_suffix.isEmpty {
+                cache_extra["zHeENZu+wbg7PUprwNwBWg"] = og_region_suffix
+                cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = og_region_code
+            } else {
+                cache_extra.removeObject(forKey: "zHeENZu+wbg7PUprwNwBWg")
+                cache_extra.removeObject(forKey: "h63QSdBCiT/z0WU6rdQv6Q")
+            }
+
             let data = try PropertyListSerialization.data(fromPropertyList: mg_dict_now, format: .xml, options: 0)
 
             try mg_write(data)
@@ -470,6 +510,15 @@ struct ContentView: View {
         }
         
         return false
+    }
+
+    private var region_suffixes: [String] {
+        ["CH/A", "LL/A", "ZP/A", "KH/A", "DN/A", "TA/A", "B/A", "F/A", "J/A", "X/A", "C/A", "Y/A"]
+    }
+
+    private func region_code(for suffix: String) -> String {
+        guard let code = suffix.split(separator: "/").first else { return "" }
+        return String(code)
     }
     
     private func machine_name() -> String {
