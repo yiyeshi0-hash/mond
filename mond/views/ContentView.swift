@@ -284,6 +284,7 @@ struct ContentView: View {
     private enum MGViewError: Error, LocalizedError {
         case missingArtworkSubtype
         case missingArtworkDeviceName
+        case writeVerificationFailed
         
         var errorDescription: String? {
             switch self {
@@ -291,6 +292,8 @@ struct ContentView: View {
                 return "Failed to get ArtworkDeviceSubType!"
             case .missingArtworkDeviceName:
                 return "Failed to get ArtworkDeviceProductDescription!"
+            case .writeVerificationFailed:
+                return "Failed to verify MobileGestalt values after writing!"
             }
         }
     }
@@ -384,10 +387,41 @@ struct ContentView: View {
             let data = try PropertyListSerialization.data(fromPropertyList: mg_dict_now, format: .xml, options: 0)
 
             try mg_write(data)
+
+            let written_url = URL(fileURLWithPath: TweakPaths.gestalt)
+            let written_dict = try NSMutableDictionary(contentsOf: written_url, error: ())
+            let written_extra = written_dict["CacheExtra"] as? NSMutableDictionary ?? NSMutableDictionary()
+
+            let expected_suffix = region_suffix.isEmpty ? og_region_suffix : region_suffix
+            let expected_code = region_suffix.isEmpty ? og_region_code : region_code(for: region_suffix)
+            let expected_model = model_number.isEmpty ? og_model_number : model_number
+
+            if expected_suffix.isEmpty && expected_code.isEmpty {
+                guard written_extra["zHeENZu+wbg7PUprwNwBWg"] == nil,
+                      written_extra["h63QSdBCiT/z0WU6rdQv6Q"] == nil else {
+                    throw MGViewError.writeVerificationFailed
+                }
+            } else {
+                guard written_extra["zHeENZu+wbg7PUprwNwBWg"] as? String == expected_suffix,
+                      written_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == expected_code else {
+                    throw MGViewError.writeVerificationFailed
+                }
+            }
+
+            if expected_model.isEmpty {
+                guard written_extra["97JDvERpVwO+GHtthIh7hA"] == nil else {
+                    throw MGViewError.writeVerificationFailed
+                }
+            } else {
+                guard written_extra["97JDvERpVwO+GHtthIh7hA"] as? String == expected_model else {
+                    throw MGViewError.writeVerificationFailed
+                }
+            }
+
             mg_dict_now = NSMutableDictionary()
             enable_devicename = false
 
-            print("(mg) successfully overwrote mobilegestalt!")
+            print("(mg) successfully overwrote and verified mobilegestalt!")
             Alertinator.shared.alert(title: "Successfully applied Gestalt tweaks!", body: "Respring your device for changes to take effect. Note that some tweaks may require a reboot for them to apply properly.", actionLabel: "Respring", action: {
                 state.respring()
             })
@@ -496,13 +530,13 @@ struct ContentView: View {
         
         return Binding<Bool>(
             get: {
-                return cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == "US" &&
+                return cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] as? String == "LL" &&
                     cache_extra["zHeENZu+wbg7PUprwNwBWg"] as? String == "LL/A"
             },
             set: { enabled in
                 if enabled {
                     Alertinator.shared.alert(title: "Warning!", body: "Please do not use this feature to bypass region restrictions that would equate to breaking regional laws (e.g. disabling the camera shutter sound). We will NOT be held responsible for enabling any illegal activites!")
-                    cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = "US"
+                    cache_extra["h63QSdBCiT/z0WU6rdQv6Q"] = "LL"
                     cache_extra["zHeENZu+wbg7PUprwNwBWg"] = "LL/A"
                 } else {
                     cache_extra.removeObject(forKey: "h63QSdBCiT/z0WU6rdQv6Q")
